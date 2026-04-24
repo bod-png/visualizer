@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spotify Visualizer</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Editorial+New:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --white: #ffffff;
+    --black: #000000;
+    --gray: rgba(255,255,255,0.18);
+    --gray-dim: rgba(255,255,255,0.08);
+    --mono: 'DM Mono', monospace;
+  }
+
+  html, body {
+    width: 100%; height: 100%;
+    background: #000;
+    overflow: hidden;
+    cursor: none;
+  }
+
+  #cursor {
+    position: fixed;
+    width: 6px; height: 6px;
+    background: #fff;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 9999;
+    transform: translate(-50%, -50%);
+    transition: transform 0.1s, width 0.2s, height 0.2s;
+    mix-blend-mode: difference;
+  }
+
+  canvas#bg {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 0;
+  }
+
+  canvas#wv {
+    position: fixed;
+    bottom: 88px; left: 0;
+    width: 100%; height: 80px;
+    z-index: 2;
+  }
+
+  #ui {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    pointer-events: none;
+  }
+
+  /* ─── LOGIN ─── */
+  #loginScreen {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    background: #000;
+  }
+
+  .login-eyebrow {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    color: rgba(255,255,255,0.22);
+    margin-bottom: 36px;
+    text-transform: uppercase;
+  }
+
+  .login-title {
+    font-family: 'Editorial New', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(36px, 6vw, 72px);
+    color: #fff;
+    line-height: 1;
+    margin-bottom: 48px;
+    letter-spacing: -0.02em;
+  }
+
+  #loginBtn {
+    background: #fff;
+    color: #000;
+    border: none;
+    padding: 14px 40px;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    cursor: pointer;
+    pointer-events: all;
+    transition: opacity 0.2s, transform 0.15s;
+  }
+  #loginBtn:hover { opacity: 0.82; transform: scale(0.98); }
+  #loginBtn:active { transform: scale(0.95); }
+
+  .login-sub {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: rgba(255,255,255,0.12);
+    margin-top: 18px;
+    letter-spacing: 0.08em;
+  }
+
+  /* ─── TRACK META ─── */
+  #metaBlock {
+    position: fixed;
+    top: 28px; left: 32px;
+    z-index: 10;
+    max-width: 50vw;
+    display: none;
+  }
+
+  #tName {
+    font-family: 'Editorial New', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(18px, 2.5vw, 28px);
+    color: #fff;
+    line-height: 1.1;
+    letter-spacing: -0.01em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+  }
+
+  #tArtist {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: rgba(255,255,255,0.35);
+    letter-spacing: 0.12em;
+    margin-top: 6px;
+    text-transform: uppercase;
+  }
+
+  /* ─── ALBUM ART ─── */
+  #albumWrap {
+    position: fixed;
+    top: 24px; right: 28px;
+    z-index: 10;
+    display: none;
+  }
+
+  #albumArt {
+    width: 56px; height: 56px;
+    object-fit: cover;
+    opacity: 0.6;
+    filter: grayscale(30%);
+    display: block;
+  }
+
+  /* ─── PROGRESS ─── */
+  #progressWrap {
+    position: fixed;
+    bottom: 56px;
+    left: 32px; right: 32px;
+    z-index: 10;
+    display: none;
+  }
+
+  #timeRow {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+
+  #timeRow span {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: rgba(255,255,255,0.25);
+    letter-spacing: 0.1em;
+  }
+
+  #progTrack {
+    width: 100%;
+    height: 1px;
+    background: rgba(255,255,255,0.08);
+    position: relative;
+  }
+
+  #progFill {
+    position: absolute;
+    top: 0; left: 0;
+    height: 100%;
+    background: rgba(255,255,255,0.6);
+    width: 0%;
+    transition: width 0.5s linear;
+  }
+
+  /* ─── STATUS ─── */
+  #statusRow {
+    position: fixed;
+    bottom: 24px;
+    left: 0; right: 0;
+    display: none;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    z-index: 10;
+  }
+
+  #statusDot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.2);
+    transition: background 0.4s;
+  }
+  #statusDot.live { background: #fff; }
+
+  #statusTxt {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: rgba(255,255,255,0.18);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  /* ─── CORNER MARK ─── */
+  #mark {
+    position: fixed;
+    bottom: 24px; right: 28px;
+    font-family: var(--mono);
+    font-size: 9px;
+    color: rgba(255,255,255,0.08);
+    letter-spacing: 0.14em;
+    z-index: 10;
+  }
+</style>
+</head>
+<body>
+
+<div id="cursor"></div>
+<canvas id="bg"></canvas>
+<canvas id="wv"></canvas>
+
+<!-- LOGIN -->
+<div id="loginScreen">
+  <div class="login-eyebrow">audio visualizer</div>
+  <div class="login-title">escucha visible</div>
+  <button id="loginBtn">Conectar con Spotify</button>
+  <div class="login-sub">requiere cuenta con reproducción activa</div>
+</div>
+
+<!-- PLAYER UI -->
+<div id="ui">
+  <div id="metaBlock">
+    <div id="tName">—</div>
+    <div id="tArtist">—</div>
+  </div>
+
+  <div id="albumWrap">
+    <img id="albumArt" alt="">
+  </div>
+
+  <div id="progressWrap">
+    <div id="timeRow">
+      <span id="tCur">0:00</span>
+      <span id="tTot">0:00</span>
+    </div>
+    <div id="progTrack"><div id="progFill"></div></div>
+  </div>
+
+  <div id="statusRow">
+    <div id="statusDot"></div>
+    <span id="statusTxt">pausado</span>
+  </div>
+</div>
+
+<div id="mark">VIS / 001</div>
+
+<script>
+const CLIENT_ID = '58e0b5c565f04ef09fc102ec5836b8ad';
+const REDIRECT_URI = 'https://claude.ai/';
+const SCOPES = 'user-read-currently-playing user-read-playback-state';
+
+// ─── CURSOR ───
+const cur = document.getElementById('cursor');
+window.addEventListener('mousemove', e => {
+  cur.style.left = e.clientX + 'px';
+  cur.style.top = e.clientY + 'px';
+});
+document.querySelectorAll('button').forEach(b => {
+  b.addEventListener('mouseenter', () => { cur.style.width='14px'; cur.style.height='14px'; });
+  b.addEventListener('mouseleave', () => { cur.style.width='6px'; cur.style.height='6px'; });
+});
+
+// ─── CANVAS ───
+const bgC = document.getElementById('bg');
+const wvC = document.getElementById('wv');
+const bgX = bgC.getContext('2d');
+const wvX = wvC.getContext('2d');
+let W, H;
+
+function resize() {
+  W = bgC.width = window.innerWidth;
+  H = bgC.height = window.innerHeight;
+  wvC.width = W; wvC.height = 80;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ─── BLOB ───
+const ORBIT = 14;
+const orbitPts = Array.from({length: ORBIT}, () => ({x: 0, y: 0}));
+const targetPts = Array.from({length: ORBIT}, () => ({x: 0, y: 0}));
+const blobP = Array.from({length: ORBIT}, () => ({
+  sx: 0.25 + Math.random() * 0.55,
+  sy: 0.25 + Math.random() * 0.55,
+  ax: Math.random() * Math.PI * 2,
+  ay: Math.random() * Math.PI * 2
+}));
+
+let time = 0, smoothVol = 0, idlePhase = 0;
+
+function updateOrbit(vol) {
+  const cx = W / 2, cy = H / 2 - 40;
+  const base = Math.min(W, H) * 0.18;
+  const amp = base * (0.5 + vol * 3.5);
+  for (let i = 0; i < ORBIT; i++) {
+    const angle = (i / ORBIT) * Math.PI * 2;
+    const b = blobP[i];
+    const n1 = Math.sin(time * b.sx + b.ax + angle) * 0.5 + 0.5;
+    const n2 = Math.cos(time * b.sy + b.ay) * 0.5 + 0.5;
+    const r = amp * (0.62 + n1 * 0.58 + n2 * 0.26);
+    targetPts[i].x = cx + Math.cos(angle) * r;
+    targetPts[i].y = cy + Math.sin(angle) * r;
+  }
+  const lp = 0.055 + vol * 0.13;
+  for (let i = 0; i < ORBIT; i++) {
+    orbitPts[i].x += (targetPts[i].x - orbitPts[i].x) * lp;
+    orbitPts[i].y += (targetPts[i].y - orbitPts[i].y) * lp;
+  }
+}
+
+function drawBlob(vol) {
+  bgX.clearRect(0, 0, W, H);
+  bgX.fillStyle = '#000';
+  bgX.fillRect(0, 0, W, H);
+
+  const pts = orbitPts, n = pts.length;
+  const cx = W / 2, cy = H / 2 - 40;
+
+  updateOrbit(vol);
+
+  // outer glow
+  bgX.save();
+  bgX.globalAlpha = 0.06 + vol * 0.08;
+  bgX.beginPath();
+  for (let i = 0; i < n; i++) {
+    const p = pts[i], pn = pts[(i+1)%n];
+    const mx = (p.x+pn.x)/2, my = (p.y+pn.y)/2;
+    i === 0 ? bgX.moveTo(mx, my) : bgX.quadraticCurveTo(p.x, p.y, mx, my);
+  }
+  bgX.closePath();
+  const g = bgX.createRadialGradient(cx, cy, 0, cx, cy, Math.min(W,H)*0.42);
+  g.addColorStop(0, 'rgba(255,255,255,0.95)');
+  g.addColorStop(0.55, 'rgba(255,255,255,0.18)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  bgX.fillStyle = g; bgX.fill(); bgX.restore();
+
+  // main blob
+  bgX.save();
+  bgX.globalAlpha = 0.48 + vol * 0.46;
+  bgX.beginPath();
+  for (let i = 0; i < n; i++) {
+    const p = pts[i], pn = pts[(i+1)%n];
+    const mx = (p.x+pn.x)/2, my = (p.y+pn.y)/2;
+    i === 0 ? bgX.moveTo(mx, my) : bgX.quadraticCurveTo(p.x, p.y, mx, my);
+  }
+  bgX.closePath();
+  bgX.fillStyle = '#fff'; bgX.fill(); bgX.restore();
+
+  // inner hole
+  const iS = 0.32 + vol * 0.1;
+  bgX.save(); bgX.globalAlpha = 0.96;
+  bgX.beginPath();
+  for (let i = 0; i < n; i++) {
+    const p = {x: cx+(pts[i].x-cx)*iS, y: cy+(pts[i].y-cy)*iS};
+    const pn = {x: cx+(pts[(i+1)%n].x-cx)*iS, y: cy+(pts[(i+1)%n].y-cy)*iS};
+    const mx=(p.x+pn.x)/2, my=(p.y+pn.y)/2;
+    i === 0 ? bgX.moveTo(mx, my) : bgX.quadraticCurveTo(p.x, p.y, mx, my);
+  }
+  bgX.closePath();
+  bgX.fillStyle = '#000'; bgX.fill(); bgX.restore();
+}
+
+function drawWave(t) {
+  wvX.clearRect(0, 0, W, 80);
+  wvX.save();
+  wvX.strokeStyle = 'rgba(255,255,255,0.55)';
+  wvX.lineWidth = 1;
+  wvX.beginPath();
+  const len = 128;
+  for (let i = 0; i < len; i++) {
+    const v = Math.sin(t * 3.2 + i * 0.28) * Math.sin(t * 1.7 + i * 0.11) * 22 + 40;
+    const x = (i / len) * W;
+    i === 0 ? wvX.moveTo(x, v) : wvX.lineTo(x, v);
+  }
+  wvX.stroke(); wvX.restore();
+}
+
+let isPlaying = false;
+
+function loop() {
+  requestAnimationFrame(loop);
+  time += 0.006;
+  idlePhase += 0.009;
+  const targetVol = isPlaying
+    ? 0.06 + Math.abs(Math.sin(idlePhase * 2.3)) * 0.13
+    : 0.035 + Math.sin(idlePhase) * 0.02;
+  smoothVol += (targetVol - smoothVol) * 0.09;
+  drawBlob(smoothVol);
+  drawWave(time);
+}
+loop();
+
+// ─── SPOTIFY AUTH (PKCE) ───
+let token = null, pollTimer = null;
+
+function fmt(ms) {
+  const s = Math.floor(ms / 1000);
+  return Math.floor(s/60) + ':' + (s%60 < 10 ? '0' : '') + (s%60);
+}
+
+function rnd(len) {
+  const a = new Uint8Array(len);
+  crypto.getRandomValues(a);
+  return btoa(String.fromCharCode(...a)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+}
+
+async function challenge(v) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(v));
+  return btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+}
+
+document.getElementById('loginBtn').addEventListener('click', async () => {
+  const verifier = rnd(32);
+  const ch = await challenge(verifier);
+  sessionStorage.setItem('sp_v', verifier);
+  const p = new URLSearchParams({
+    client_id: CLIENT_ID,
+    response_type: 'code',
+    redirect_uri: REDIRECT_URI,
+    code_challenge_method: 'S256',
+    code_challenge: ch,
+    scope: SCOPES
+  });
+  window.location.href = 'https://accounts.spotify.com/authorize?' + p;
+});
+
+async function exchangeCode(code) {
+  const verifier = sessionStorage.getItem('sp_v');
+  const r = await fetch('https://accounts.spotify.com/api/token', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: new URLSearchParams({
+      client_id: CLIENT_ID,
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: REDIRECT_URI,
+      code_verifier: verifier
+    })
+  });
+  const d = await r.json();
+  if (d.access_token) {
+    token = d.access_token;
+    sessionStorage.setItem('sp_token', token);
+    if (d.refresh_token) sessionStorage.setItem('sp_refresh', d.refresh_token);
+    sessionStorage.setItem('sp_exp', Date.now() + d.expires_in * 1000);
+    showPlayer();
+  }
+}
+
+async function doRefresh() {
+  const rt = sessionStorage.getItem('sp_refresh');
+  if (!rt) return;
+  const r = await fetch('https://accounts.spotify.com/api/token', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: new URLSearchParams({grant_type:'refresh_token', refresh_token:rt, client_id:CLIENT_ID})
+  });
+  const d = await r.json();
+  if (d.access_token) {
+    token = d.access_token;
+    sessionStorage.setItem('sp_token', token);
+    sessionStorage.setItem('sp_exp', Date.now() + d.expires_in * 1000);
+  }
+}
+
+async function poll() {
+  if (!token) return;
+  const exp = parseInt(sessionStorage.getItem('sp_exp') || '0');
+  if (Date.now() > exp - 30000) await doRefresh();
+  try {
+    const r = await fetch('https://api.spotify.com/v1/me/player/currently-playing', {
+      headers: {Authorization: 'Bearer ' + token}
+    });
+    if (r.status === 204 || r.status === 404) { updateUI(null); return; }
+    if (r.status === 401) { token = null; showLogin(); return; }
+    updateUI(await r.json());
+  } catch(e) {}
+}
+
+function updateUI(d) {
+  if (!d || !d.item) {
+    isPlaying = false;
+    document.getElementById('tName').textContent = 'nada en reproducción';
+    document.getElementById('tArtist').textContent = 'abre spotify';
+    document.getElementById('statusDot').className = '';
+    document.getElementById('statusTxt').textContent = 'esperando';
+    document.getElementById('progFill').style.width = '0%';
+    document.getElementById('tCur').textContent = '0:00';
+    document.getElementById('tTot').textContent = '0:00';
+    document.getElementById('albumWrap').style.display = 'none';
+    return;
+  }
+  isPlaying = d.is_playing;
+  const item = d.item;
+  document.getElementById('tName').textContent = item.name;
+  document.getElementById('tArtist').textContent = item.artists.map(a => a.name).join(', ');
+  const pct = item.duration_ms ? (d.progress_ms / item.duration_ms * 100).toFixed(2) : 0;
+  document.getElementById('progFill').style.width = pct + '%';
+  document.getElementById('tCur').textContent = fmt(d.progress_ms || 0);
+  document.getElementById('tTot').textContent = fmt(item.duration_ms || 0);
+  document.getElementById('statusDot').className = isPlaying ? 'live' : '';
+  document.getElementById('statusTxt').textContent = isPlaying ? 'en reproducción' : 'pausado';
+  const img = item.album?.images?.[0];
+  if (img) {
+    document.getElementById('albumArt').src = img.url;
+    document.getElementById('albumWrap').style.display = 'block';
+  } else {
+    document.getElementById('albumWrap').style.display = 'none';
+  }
+}
+
+function showPlayer() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('metaBlock').style.display = 'block';
+  document.getElementById('progressWrap').style.display = 'block';
+  document.getElementById('statusRow').style.display = 'flex';
+  poll();
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(poll, 4000);
+}
+
+function showLogin() {
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('metaBlock').style.display = 'none';
+  document.getElementById('progressWrap').style.display = 'none';
+  document.getElementById('statusRow').style.display = 'none';
+  document.getElementById('albumWrap').style.display = 'none';
+}
+
+// ─── INIT ───
+(async () => {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('code');
+  if (code) {
+    history.replaceState({}, '', window.location.pathname);
+    await exchangeCode(code);
+    return;
+  }
+  const saved = sessionStorage.getItem('sp_token');
+  const exp = parseInt(sessionStorage.getItem('sp_exp') || '0');
+  if (saved && Date.now() < exp) {
+    token = saved; showPlayer();
+  } else if (sessionStorage.getItem('sp_refresh')) {
+    await doRefresh(); showPlayer();
+  }
+})();
+</script>
+</body>
+</html>
